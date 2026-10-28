@@ -207,7 +207,8 @@ def livescores():
                 if values:
                     score_text = " - ".join(values)
 
-            page += f'<div style="background:#142238;padding:15px;margin:12px 0;border-radius:12px">{home} <b style="color:#00e676">{score_text}</b> {away}</div>'
+            match_id = match.get("id", "")
+            page += f'<a href="/match/{match_id}" style="display:block;text-decoration:none;color:white;background:#142238;padding:15px;margin:12px 0;border-radius:12px">{home} <b style="color:#00e676">{score_text}</b> {away}<br><small style="color:#00e676">Tap to view match details →</small></a>'
 
     except requests.RequestException:
         page += "<p>Could not connect to Sportmonks. Please try again.</p>"
@@ -216,23 +217,123 @@ def livescores():
     return page
 
 
+
+
+@app.route("/match/<int:match_id>")
+def match_details(match_id):
+    import os
+    import requests
+    from html import escape
+
+    token = os.getenv("SPORTMONKS_TOKEN")
+    if not token:
+        return "Sportmonks token is missing", 500
+
+    try:
+        r = requests.get(
+            f"https://api.sportmonks.com/v3/football/fixtures/{match_id}",
+            params={
+                "api_token": token,
+                "include": "participants;scores;league"
+            },
+            timeout=10
+        )
+        r.raise_for_status()
+        match = r.json().get("data")
+
+        if not match:
+            return "Match details are unavailable.", 404
+
+        names = [
+            escape(team.get("name", "Team"))
+            for team in match.get("participants", [])
+        ]
+        home = names[0] if names else "Home"
+        away = names[1] if len(names) > 1 else "Away"
+
+        scores = match.get("scores") or []
+        score_text = "VS"
+        values = []
+        for item in scores:
+            score = item.get("score") or {}
+            if isinstance(score, dict) and score.get("goals") is not None:
+                values.append(str(score["goals"]))
+        if values:
+            score_text = " - ".join(values)
+
+        status = escape(str(match.get("state", {}).get("name", "Unavailable")))
+
+        return f"""
+        <html>
+        <head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+        <body style="background:#08111f;color:white;font-family:Arial;padding:20px">
+        <h1 style="color:#00e676">⚽ Match Details</h1>
+        <div style="background:#142238;padding:20px;border-radius:12px;text-align:center">
+        <h2>{home}</h2>
+        <h1 style="color:#00e676">{score_text}</h1>
+        <h2>{away}</h2>
+        <p>Status: {status}</p>
+        </div>
+        <p><a style="color:#00e676" href="/livescores">← Back to Live Scores</a></p>
+        <p><a style="color:#00e676" href="/">Home</a></p>
+        </body></html>
+        """
+    except requests.RequestException:
+        return "Could not retrieve match details. Please try again.", 502
+
 @app.route("/leagues")
 def leagues():
     return """
     <html>
+    <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Football Leagues - Football Zone</title>
+    </head>
     <body style="background:#08111f;color:white;font-family:Arial;padding:20px">
     <h1 style="color:#00e676">🏆 Football Leagues</h1>
+
     <div style="background:#142337;padding:15px;border-radius:12px">
-    <p>🇩🇰 Superliga</p>
-    <p>🏴 Premiership</p>
-    <p>🏆 Superliga Play-offs</p>
-    <p>🏆 Premiership Play-offs</p>
+
+    <h3>🏴 England</h3>
+    <p>⚽ Premier League</p>
+    <p>🏆 Championship</p>
+
+    <h3>🇪🇸 Spain</h3>
+    <p>⚽ La Liga</p>
+
+    <h3>🇮🇹 Italy</h3>
+    <p>⚽ Serie A</p>
+
+    <h3>🇩🇪 Germany</h3>
+    <p>⚽ Bundesliga</p>
+
+    <h3>🇫🇷 France</h3>
+    <p>⚽ Ligue 1</p>
+
+    <h3>🇪🇺 European Competitions</h3>
+    <p>🏆 UEFA Champions League</p>
+    <p>🏆 UEFA Europa League</p>
+    <p>🏆 UEFA Conference League</p>
+
+    <h3>🇳🇬 Nigeria</h3>
+    <p>⚽ Nigeria Premier Football League</p>
+
+    <h3>🇩🇰 Denmark</h3>
+    <p>⚽ Superliga</p>
+
+    <h3>🏴 Scotland</h3>
+    <p>⚽ Premiership</p>
+
     </div>
+
+    <br>
     <a style="color:#00e676" href="/">Back to Home</a>
     </body>
     </html>
     """
 
+if __name__ == "__main__":
+    app.run(host="127.0.0.1", port=8080, debug=False)
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=8080, debug=False)
 
